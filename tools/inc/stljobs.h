@@ -135,6 +135,21 @@ inline handle<invalid_handle_value_policy> create_named_pipe(LPCWSTR lpName, DWO
     return result;
 }
 
+#ifdef USE_EVENT
+inline handle<null_handle_policy> create_event(LPSECURITY_ATTRIBUTES lpEventAttributes,
+                                               BOOL bManualReset, BOOL bInitialState,
+                                               LPCWSTR lpName)
+{
+    handle<null_handle_policy> result{
+        CreateEventW(lpEventAttributes, bManualReset, bInitialState, lpName)};
+    if (!result) {
+        api_failure("CreateEventW");
+    }
+
+    return result;
+}
+#endif
+
 
 const auto is_exactly_space = [](const wchar_t c) { return c == L' '; };
 
@@ -305,6 +320,11 @@ struct output_collecting_pipe {
         writeHandle = create_file(pipeNameBuffer, GENERIC_WRITE | FILE_READ_ATTRIBUTES, 0, &inheritSa, OPEN_EXISTING,
             FILE_FLAG_OVERLAPPED, HANDLE{});
 
+#ifdef USE_EVENT
+        readEvent = create_event(nullptr, TRUE, FALSE, nullptr);
+        overlapped.hEvent = readEvent.get();
+#endif
+
         readIo = tp_io{std::move(readHandle), callback, this, nullptr};
 
         start();
@@ -312,7 +332,7 @@ struct output_collecting_pipe {
 
     ~output_collecting_pipe() noexcept {
         if (readIo) {
-            if (running.load()) {
+            if (running.exchange(false)) {
                 if (!CancelIoEx(readIo.get_file(), &overlapped)) {
                     api_failure("CancelIoEx"); // slams into noexcept
                 }
@@ -413,6 +433,9 @@ private:
     std::string targetBuffer; // if running, owned by a threadpool thread, otherwise owned by the calling thread
     size_t validTill{};
     handle<invalid_handle_value_policy> writeHandle;
+#ifdef USE_EVENT
+    handle<null_handle_policy> readEvent;
+#endif
     tp_io readIo;
     OVERLAPPED overlapped{};
 };

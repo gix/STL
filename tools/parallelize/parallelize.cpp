@@ -147,6 +147,16 @@ void schedule_command(parallelizer& p, const std::wstring_view commandPrefix, co
     p.add_command(std::move(toExecute));
 }
 
+void enum_files_using_git() {
+    std::wstring command = L"git ls-files -z *.cpp";
+
+    subprocess_executive process;
+    process.begin_execution(nullptr, command.data());
+    WaitForSingleObject(process.get_wait_handle(), INFINITE);
+
+    auto const result = process.complete();
+}
+
 extern "C" int wmain(int argc, wchar_t* argv[]) {
     try {
         using namespace std::string_view_literals;
@@ -173,6 +183,8 @@ extern "C" int wmain(int argc, wchar_t* argv[]) {
             puts("Other extensions will be skipped.");
             return 1;
         }
+
+        enum_files_using_git();
 
         parallelizer p;
         std::wstring_view commandPrefix(argv[1]);
